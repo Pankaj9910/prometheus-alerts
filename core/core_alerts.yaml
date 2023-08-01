@@ -1,0 +1,369 @@
+groups:
+- name: common.monitoring
+  rules:
+  - alert: PrometheusTooManyRestarts
+    expr: changes(process_start_time_seconds{job=~"prometheus|pushgateway|alertmanager"}[15m]) > 2
+    for: 5m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "Prometheus too many restarts (instance {{ $labels.instance }})"
+      description: "Prometheus has restarted more than twice in the last 15 minutes. It might be crashlooping.\n  VALUE = {{ $value }}\n  LABELS: {{ $labels }}"
+  - alert: PrometheusNotConnectedToAlertmanager
+    expr: prometheus_notifications_alertmanagers_discovered < 1
+    for: 5m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "Prometheus not connected to alertmanager (instance {{ $labels.instance }})"
+      description: "Prometheus cannot connect the alertmanager\n  VALUE = {{ $value }}\n  LABELS: {{ $labels }}"
+  - alert: PrometheusConfigurationReload
+    expr: prometheus_config_last_reload_successful != 1
+    for: 5m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "Prometheus configuration reload (instance {{ $labels.instance }})"
+      description: "Prometheus configuration reload error\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: PrometheusExporterDown
+    expr: up == 0
+    for: 30m 
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "Exporter down (instance {{ $labels.instance }})"
+      description: "Prometheus exporter down: {{ $labels.instance }}"
+  - alert: GrafanaNotAvailable
+    expr: kube_deployment_status_replicas_available{deployment="grafana"} == 0
+    for: 5m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'          
+      alert_type: system
+    annotations:
+      description: Grafana Pod of Namespace {{$labels.namespace}} is not running.
+      summary: Grafana Pod is not avaialbe or its deployment has insufficent replicas.
+  - alert: NodeOutofMemoryWarn
+    expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100 < 30
+    for: 15m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "Out of memory (instance {{ $labels.instance }})"
+      description: "Node memory is filling up (< 30% left)\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: NodeOutofMemoryCritical
+    expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100 < 10
+    for: 15m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "Out of memory (instance {{ $labels.instance }})"
+      description: "Node memory is filling up (< 10% left)\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: NodeOutOfDiskSpaceWarning
+    expr: (node_filesystem_avail_bytes * 100) / node_filesystem_size_bytes < 30
+    for: 5m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "Out of disk space (instance {{ $labels.instance }})"
+      description: "Disk is almost full (< 30% left)\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: NodeOutOfDiskSpaceCritical
+    expr: (node_filesystem_avail_bytes * 100) / node_filesystem_size_bytes < 10
+    for: 5m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "Out of disk space (instance {{ $labels.instance }})"
+      description: "Disk is almost full (< 10% left)\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: NodeHighCpuLoadWarning
+    expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 70
+    for: 15m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "High CPU load (instance {{ $labels.instance }})"
+      description: "CPU load is > 70%\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: NodeHighCpuLoadCritical
+    expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+    for: 15m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "High CPU load (instance {{ $labels.instance }})"
+      description: "CPU load is > 90%\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: DiskSpaceUsageOver100Gb
+    expr: 1 - (irate(node_memory_MemTotal_bytes[5m]) - irate(node_memory_MemFree_bytes[5m]) - irate(node_memory_Buffers_bytes[5m]) - irate(node_memory_Cached_bytes[5m]) - irate(node_memory_Slab_bytes[5m]) - irate(node_memory_PageTables_bytes[5m]) - irate(node_memory_SwapCached_bytes[5m])) > 100000000000
+    for: 5m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "Disk usage increasing at a very high rate (instance {{ $labels.node }})"
+      description: "Disk usage is increasing at a very high rate from the past 5 minutes\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: KubernetesNodeManyNotReady
+    expr: count(kube_node_status_condition{condition="Ready",status="true"} == 0) > 2
+    for: 1h
+    labels:
+      tier: kubernetes
+      service: k8s
+      severity: critical
+      context: node
+      meta: "{{ $labels.instance }}"
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      description: Many Nodes are NotReady
+      summary: Many ({{$value}}) nodes are NotReady for more than an hour
+  - alert: KubernetesNodeNotReady
+    expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+    for: 30m
+    labels:
+      tier: kubernetes
+      service: k8s
+      severity: warning
+      context: node
+      meta: "{{ $labels.instance }}"
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      description: Node status is NotReady
+      summary: Node {{$labels.node}} is NotReady for more than an hour
+  - alert: NodeResourceAlert
+    expr: kube_node_status_condition{status="true",condition!="Ready"} > 0
+    for: 30m
+    labels:
+      tier: kubernetes
+      service: node
+      severity: critical
+      context: node
+      meta: "{{ $labels.node }}"
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "{{$labels.condition}} Node Alert"
+      description: "Node {{$labels.node}} is having {{$labels.condition}} condition"
+- name: common.kubelet
+  rules:
+  - alert: KubeletVolumeOutOfDiskSpace
+    expr: kubelet_volume_stats_available_bytes{persistentvolumeclaim!~".+datanode.+"} / kubelet_volume_stats_capacity_bytes{persistentvolumeclaim!~".+datanode.+"} * 100 < 30
+    for: 5m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "Volume out of disk space (instance {{ $labels.instance }})"
+      description: "Volume is almost full (< 30% left)\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: KubeletVolumeOutOfDiskSpaceCritical
+    expr: kubelet_volume_stats_available_bytes{persistentvolumeclaim!~".+datanode.+"} / kubelet_volume_stats_capacity_bytes{persistentvolumeclaim!~".+datanode.+"} * 100 < 10
+    for: 5m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "Volume out of disk space (instance {{ $labels.instance }})"
+      description: "Volume is almost full (< 10% left)\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+- name: common.pod
+  rules:      
+  - alert: StatefulsetDown
+    expr: (kube_statefulset_status_replicas_ready / kube_statefulset_status_replicas_current) != 1
+    for: 15m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "StatefulSet replica down (instance {{ $labels.instance }})"
+      description: "A StatefulSet replica went down\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: DaemonsetDown
+    expr: (kube_daemonset_status_desired_number_scheduled / kube_daemonset_status_current_number_scheduled) != 1
+    for: 15m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "DaemonSet replica down (instance {{ $labels.instance }})"
+      description: "A DaemonSet replica went down\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: ReplicasetDown
+    expr: (kube_replicaset_spec_replicas != 0) and (kube_replicaset_status_ready_replicas / kube_replicaset_spec_replicas != 1)
+    for: 15m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "ReplicaSet replica down (instance {{ $labels.instance }})"
+      description: "A ReplicaSet replica went down\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: KubernetesDeploymentInsufficientReplicas
+    expr: sum(kube_deployment_status_replicas) by (namespace,deployment) != sum(kube_deployment_spec_replicas) by (namespace,deployment)
+    for: 10m
+    labels:
+      tier: kubernetes
+      service: deployment
+      severity: warning
+      context: deployment
+      meta: "{{ $labels.deployment }}"
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      description: Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has {{ $value }} replica available, which is less then desired
+      summary: Deployment has less than desired replicas since 10m
+  - alert: PodFrequentlyRestarting
+    expr: increase(kube_pod_container_status_restarts_total[1h]) > 5
+    for: 10m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'          
+      alert_type: system
+    annotations:
+      description: Pod {{$labels.namespace}}/{{$labels.pod}} is was restarted {{$value}} times within the last hour
+      summary: Pod is restarting frequently
+  - alert: TillerVersionMismatch
+    expr: absent(kube_pod_container_info{container="tiller", image="gcr.io/kubernetes-helm/tiller:v2.11.0"}) == 1
+    for: 1m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'          
+      alert_type: system
+    annotations:
+      description: Tiller Pod of Namespace {{$labels.namespace}} is not the correct image version (it should be v2.11.0).
+      summary: Tiller Pod is running with the incorrect image version (it should be v2.11.0).
+  - alert: IngressControllerDown
+    expr: count(kube_pod_info{pod=~"(.*)nginx-ingress-controller(.*)", namespace="ingress"}) < 1 
+    for: 5m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      summary: "Ingress controller is down"
+      description: "The nginx ingress controller in the ingress namespace is unavailable"
+  - alert: Nginx_Low_Availability
+    expr: sum(rate(nginx_ingress_controller_requests{status!~"[4-5].*"}[5m])) by (ingress) / sum(rate(nginx_ingress_controller_requests{}[5m])) by (ingress) < 0.995
+    for: 15m
+    labels:
+      severity: critical
+      namespace: '{{ $labels.namespace }}'
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      availability: '{{ $value }}'
+      ingress: '{{ $labels.ingress }}'
+      summary: 'Availability SLI (99.5%) has been breached for the {{ $labels.namespace }} environment in {{ $externalLabels.prometheus_group }}.'
+      description: The percentage of 4xx and 5xx error codes seen on nginx response codes has dropped below acceptable (SLI) levels for at least 15 minutes.
+- name: meta
+  rules:
+  - alert: DeadMansSwitch
+    expr: vector(1)
+    for: 1s
+    labels:
+      severity: info
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+      runbook: no-runbook
+    annotations:
+      description: This is a DeadMansSwitch meant to ensure that the entire Alerting pipeline is functional.
+      summary: Alerting DeadMansSwitch
+- name: common.job
+  rules:
+  - alert: CronJobFailed
+    expr: ((time() - kube_job_status_start_time) < 600) and (kube_job_status_failed > 0)
+    for: 5m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      description: "Job {{$labels.namespace}}/{{$labels.exported_job}} failed to complete"
+      summary: "Job failed"
+- name: common.kubernetes
+  rules:
+  - alert: KubernetesNodesTooManyOpenFiles
+    expr: 100*process_open_fds{job="kubernetes-nodes"}/process_max_fds{job="kubernetes-nodes"} > 50
+    for: 10m
+    labels:
+      tier: kubernetes
+      service: k8s
+      severity: warning
+      context: system
+      meta: "{{ $labels.instance }}"
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      description: "{{ $labels.job }} on {{ $labels.instance }} is using {{ $value }}% of the available file/socket descriptors"
+      summary: Too many open file descriptors
+  - alert: KubernetesPVCPendingOrLost
+    expr: kube_persistentvolumeclaim_status_phase{phase=~"Pending|Lost"} == 1
+    for: 15m
+    labels:
+      tier: kubernetes
+      service: k8s
+      severity: warning
+      context: pvc
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      description: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} stuck in phase {{ $labels.phase }} since 15 min"
+      summary: "PVC stuck in phase {{ $labels.phase }}"
+  - alert: KubernetesNodeKernelDeadlock
+    expr: kube_node_status_condition{condition="KernelDeadlock",status="true"} == 1
+    for: 96h
+    labels:
+      tier: kubernetes
+      service: node
+      severity: warning
+      context: availability
+      meta: "{{ $labels.instance }}"
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      description: Node kernel has deadlock
+      summary: Permanent kernel deadlock on {{$labels.node}}. Please drain and reboot node
+  - alert: KubernetesNodeHighNumberOfOpenConnections
+    expr: node_netstat_Tcp_CurrEstab > 20000
+    for: 15m
+    labels:
+      tier: kubernetes
+      service: node
+      severity: warning
+      context: availability
+      meta: "{{ $labels.instance }}"
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      description: High number of open TCP connections
+      summary: The node {{ $labels.instance }} has more than 20000 active TCP connections. The maximally possible amount is 32768 connections
+  - alert: KubernetesApiServerDown
+    expr: up {job="kubernetes-apiservers"} == 0
+    for: 10m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      alert_type: system
+    annotations:
+      description: Kube Api Server is down.
+      summary: Kube Api Server is down.         
+
